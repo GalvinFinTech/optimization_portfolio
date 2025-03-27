@@ -84,11 +84,11 @@ def main():
         unsafe_allow_html=True
     )
     logo_path = "LOGO.png"  # Điền đúng đường dẫn đến logo của bạn
-    st.sidebar.image(logo_path, use_column_width=True)  # Hiển thị logo trong sidebar
+    st.sidebar.image(logo_path, use_container_width=True)  # Hiển thị logo trong sidebar
 
      # Thêm banner/header
     banner_path = "banner.png"  # Điền đúng đường dẫn đến ảnh header của bạn
-    st.image(banner_path, use_column_width=True)  # Hiển thị banner ở header
+    st.image(banner_path, use_container_width=True)  # Hiển thị banner ở header
     # Thêm tiêu đề cho ứng dụng
 
 
