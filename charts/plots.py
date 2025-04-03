@@ -693,3 +693,70 @@ def plot_portfolio_metrics(allocation_df):
     fig = px.pie(allocation_df, names="Mã cổ phiếu", values="Tỷ trọng tối ưu",
                  title="Phân bổ danh mục đầu tư")
     st.plotly_chart(fig)
+
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+
+def display_radar_chart(data, title, color):
+    categories = data.columns[1:].tolist()
+    values = data.iloc[0, 1:].tolist()
+    values += values[:1]  # Đóng vòng radar
+    categories += categories[:1]
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatterpolar(
+        r=values,
+        theta=categories,
+        fill='toself',
+        name=data.iloc[0, 0],
+        line=dict(color=color, width=2)
+    ))
+    
+    fig.update_layout(polar=dict(radialaxis=dict(visible=True)), title=title)
+    st.plotly_chart(fig, use_container_width=True)
+
+def display_bar_chart(data, x_col, y_col, title):
+    fig = px.bar(data, x=x_col, y=y_col, title=title, text_auto=True, color=x_col)
+    st.plotly_chart(fig, use_container_width=True)
+
+def display_line_chart(data, x_col, y_col, title):
+    fig = px.line(data, x=x_col, y=y_col, title=title, markers=True)
+    st.plotly_chart(fig, use_container_width=True)
+
+def visualize_analysis(screener_df, code):
+    df_selected = screener_df[screener_df['ticker'] == code]
+    if df_selected.empty:
+        st.warning(f"Không tìm thấy dữ liệu cho mã cổ phiếu {code}")
+        return
+    
+    industry = df_selected['industry'].values[0]
+    df_filtered = screener_df[screener_df['industry'] == industry]
+    
+    data1 = df_selected[['ticker', 'business_operation', 'business_model', 'financial_health', 'beta', 'stock_rating']]
+    data1.columns = ['Mã', 'Hiệu suất kinh doanh', 'Mô hình kinh doanh', 'Sức khỏe tài chính', 'Rủi ro hệ thống', 'Xếp hạng định giá']
+    
+    display_radar_chart(data1, f'Biểu đồ Radar - Đánh giá {code}', 'blue')
+    
+    with st.expander("📊 Hiệu Quả Hoạt Động"):
+        display_bar_chart(df_filtered, 'ticker', 'roe', 'ROE của ngành')
+        display_bar_chart(df_filtered, 'ticker', 'gross_margin', 'Biên lợi nhuận gộp của ngành')
+        display_bar_chart(df_filtered, 'ticker', 'net_margin', 'Biên lợi nhuận ròng của ngành')
+        display_bar_chart(df_filtered, 'ticker', 'eps', 'EPS của ngành')
+    
+    with st.expander("💰 Sức Khỏe Tài Chính"):
+        display_bar_chart(df_filtered, 'ticker', 'financial_health', 'Sức khỏe tài chính của ngành')
+        display_bar_chart(df_filtered, 'ticker', 'doe', 'Tỷ lệ nợ trên vốn chủ sở hữu')
+    
+    with st.expander("📈 Định Giá"):
+        display_bar_chart(df_filtered, 'ticker', 'pe', 'Chỉ số P/E của ngành')
+        display_bar_chart(df_filtered, 'ticker', 'pb', 'Chỉ số P/B của ngành')
+        display_bar_chart(df_filtered, 'ticker', 'ev_ebitda', 'EV/EBITDA của ngành')
+    
+    with st.expander("🎯 Cổ Tức"):
+        display_bar_chart(df_filtered, 'ticker', 'dividend_yield', 'Tỷ lệ cổ tức của ngành')
+    
+    with st.expander("🚀 Tăng Trưởng Lợi Nhuận"):
+        display_bar_chart(df_filtered, 'ticker', 'revenue_growth_1y', 'Tăng trưởng doanh thu 1 năm')
+        display_bar_chart(df_filtered, 'ticker', 'eps_growth_1y', 'Tăng trưởng EPS 1 năm')

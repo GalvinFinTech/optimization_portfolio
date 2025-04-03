@@ -23,6 +23,9 @@ def fetch_multiple_stock_prices(symbols, start_date, end_date, interval='1D', so
             print(f"❌ Lỗi khi tải dữ liệu {symbol}: {e}")
     if close_prices.empty:
         raise ValueError("❌ Không có dữ liệu nào được tải thành công!")
+    
+    close_prices.fillna(method='ffill', inplace=True)  # Điền NaN bằng giá gần nhất
+
     close_prices.index.name = "date"
     return close_prices
 
