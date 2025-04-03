@@ -207,7 +207,7 @@ def calculate_atr(high, low, close, period=14):
     low_close = np.abs(low - close.shift(1))
     tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
     atr = tr.rolling(window=period, min_periods=1).mean()
-    return atr
+    return 
 
 def calculate_sma(series, window=50):
     return series.rolling(window=window).mean()
