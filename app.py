@@ -28,7 +28,67 @@ from data.loader import (
 from charts.plots import (
     plot_price_volume,plot_accounting_balance,plot_business_results,plot_cash_flow,plot_capital_structure,
     plot_asset_structure,plot_profit_structure,plot_financial_ratios,plot_operating_efficiency,plot_leverage_ratios,plot_pe_ratio,
-    plot_pb_ratio,dupont_analysis_plot,plot_combined_charts,plot_stock_vs_vnindex,visualize_analysis)
+    plot_pb_ratio,dupont_analysis_plot,plot_combined_charts,plot_stock_vs_vnindex, visualize_analysis)
+
+
+
+def main():
+    st.set_page_config(page_title="Stock Dashboard", page_icon="📈", layout="wide")
+    # Thêm CSS tùy chỉnh cho trang và sidebar
+    st.markdown(
+        """
+        <style>
+            body {
+                background-color: #f0f2f5;  /* Màu nền sáng xám */
+            }
+            .header {
+                text-align: center;
+                background: linear-gradient(135deg, #1e1e1e, #333333); 
+                padding: 20px; 
+                border-radius: 12px;
+                color: white;
+            }
+            .sidebar .sidebar-content {
+                background-color: #4e73df;  /* Màu nền cho sidebar */
+                color: white;  /* Màu chữ trong sidebar */
+            }
+            .sidebar .sidebar-content .st-selectbox, .sidebar .sidebar-content .st-button {
+                color: #ffffff;  /* Màu chữ cho các nút và selectbox */
+            }
+            .sidebar .sidebar-content .st-selectbox select {
+                background-color: #007bff;  /* Màu nền cho selectbox */
+                color: white;
+            }
+            .stock-info {
+                font-size: 18px;
+                font-weight: bold;
+                color: #2c3e50; /* Một màu tối cho thông tin */
+            }
+            .column {
+                border: 1px solid #ddd;  /* Đường viền nhẹ */
+                border-radius: 5px;
+                padding: 15px;
+                margin: 10px;
+                background-color: white;  /* Nền trắng cho cột */
+                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);  /* Đổ bóng cho cột */
+            }
+            .highlight {
+                color: green;
+            }
+            .alert {
+                color: red;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    logo_path = "LOGO.png"  # Điền đúng đường dẫn đến logo của bạn
+    st.sidebar.image(logo_path, use_container_width=True)  # Hiển thị logo trong sidebar
+
+     # Thêm banner/header
+    banner_path = "banner.png"  # Điền đúng đường dẫn đến ảnh header của bạn
+    st.image(banner_path, use_container_width=True)  # Hiển thị banner ở header
+    # Thêm tiêu đề cho ứng dụng
 
 
 
@@ -300,16 +360,28 @@ def phan_tich_nganh(code):
     chart_type = 'treemap'  # Biểu đồ mặc định
     value_col = 'market_cap'  # Cột mặc định là market_cap
     
-
+    # Sử dụng các giá trị mặc định cho chiều rộng và chiều cao
     width = 1000
     height = 600
     
+
     # Hiển thị biểu đồ
     fig = create_chart(screener_df, value_col, chart_type.lower(), width, height)
     st.plotly_chart(fig)
     
+    # Nhập mã cổ phiếu
+    # Kiểm tra các cổ phiếu trong cùng ngành với cổ phiếu quan tâm (FPT mặc định)
+    #code = st.text_input('Nhập mã cổ phiếu:', 'FPT').upper()
+    #fpt_industry = screener_df[screener_df['ticker'] == code]['industry'].values[0]
+    #same_industry_stocks = screener_df[screener_df['industry'] == fpt_industry]
     same_industry_stocks = get_same_industry_stocks(code)
 
+    
+    #st.write(f"Ngành của cổ phiếu {code}: {fpt_industry}")
+    #st.write("Các cổ phiếu cùng ngành:")
+    #st.dataframe(same_industry_stocks[['ticker', 'industry']])
+    
+    # Lọc dữ liệu tài chính cho các cổ phiếu trong ngành
     df_stocks = get_financial_data(same_industry_stocks)
 
     # Cho phép người dùng chọn các cổ phiếu hiển thị
@@ -454,9 +526,14 @@ def phan_tich_cp(code, df_stock, df_vnindex,df_insights):
 
         # Thêm một số thông báo hỗ trợ, nhắc nhở người dùng về nội dung
         st.markdown("Bạn có thể mở các phần để xem biểu đồ chi tiết hơn. Di chuyển chuột qua các phần để xem thông tin rõ hơn.")
-    
-        
-    
+    with t5:
+        cdkt, kqkd, lctt = st.tabs(["Bảng Cân Đối Kế Toán", "Báo Cáo Kết Quả Kinh Doanh", "Báo Cáo Lưu Chuyển Tiền Tệ"])
+
+        with cdkt:
+            # In đậm tên cột
+            styled_balance = df_balance.style.set_properties(**{'font-weight': 'bold'}, subset=df_balance.columns)
+            st.dataframe(styled_balance.highlight_max(axis=0))  # Highlight maximum values
+
             # Cung cấp tùy chọn tải xuống
             csv_balance = df_balance.to_csv(index=False).encode('utf-8')
             st.download_button("Tải Bảng Cân Đối Kế Toán", csv_balance, "balance_sheet.csv", "text/csv")
@@ -522,8 +599,8 @@ def phan_tich_cp(code, df_stock, df_vnindex,df_insights):
                 
             except Exception as e:
                 st.error(f"Không có dữ liệu công ty con")
-        
 
+                
 def main():
     st.set_page_config(page_title="Stock Dashboard", page_icon="📈", layout="wide")
     # Thêm CSS tùy chỉnh cho trang và sidebar
@@ -581,7 +658,7 @@ def main():
         unsafe_allow_html=True
     )
     logo_path = "LOGO.png"  # Điền đúng đường dẫn đến logo của bạn
-    st.sidebar.image(logo_path, use_container_width=True)  # Hiển thị logo trong sidebar
+    st.sidebar.image(logo_path, use_column_width=True)  # Hiển thị logo trong sidebar
 
     
 
