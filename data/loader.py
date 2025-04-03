@@ -4,7 +4,8 @@ from vnstock import Vnstock
 from vnstock.explorer.vci import Company
 import streamlit as st
 import datetime
-# data/loader.py
+import plotly.graph_objects as go
+import numpy as np
 
 
 @st.cache_data
@@ -25,6 +26,36 @@ def fetch_and_prepare_data(symbol, start_date, end_date, interval='1D', source='
     except Exception as e:
         print(f"❌ Lỗi khi lấy dữ liệu {symbol}: {e}")
         return None
+    
+
+
+
+@st.cache_data
+def get_ratios(stock_code, source='VCI'):
+    """
+    Lấy dữ liệu tài chính theo từng cổ phiếu từ Vnstock.
+    Trả về DataFrame chứa các chỉ tiêu tài chính theo từng năm.
+    """
+    try:
+        stock = Vnstock().stock(symbol=stock_code, source=source)
+        df = stock.finance.ratio(period='year', lang='vi', dropna=True)
+
+        if df.empty:
+            st.warning(f"Không có dữ liệu tài chính cho {stock_code}.")
+            return None
+
+        # Định dạng lại cột MultiIndex
+        df.columns = ['_'.join(col) if isinstance(col, tuple) else col for col in df.columns]
+        df.rename(columns={'Meta_Năm': 'Năm', 'Meta_CP': 'CP','Meta_Kỳ':'Kỳ'}, inplace=True)
+
+        # Chuyển đổi 'Năm' thành dạng số
+        df['Năm'] = pd.to_numeric(df['Năm'], errors='coerce')
+
+        return df
+    except Exception as e:
+        st.error(f"Lỗi khi lấy dữ liệu cho {stock_code}: {e}")
+        return None
+
     
 
 @st.cache_resource
@@ -137,7 +168,6 @@ def get_subsidiaries_info(code):
 
     return subsidiaries
 
-
 @st.cache_resource
 # Hàm lấy thông tin cổ đông
 def get_shareholders_info(code):
@@ -145,7 +175,7 @@ def get_shareholders_info(code):
     shareholders = company.shareholders()
     return shareholders.rename(columns={'share_holder': 'Cổ đông', 'share_own_percent': 'Tỷ lệ(%) sở hữu'})
 
-@st.cache_resource
+
 def get_all_symbols(source='VCI'):
     """
     Lấy danh sách tất cả các mã cổ phiếu trên thị trường từ nguồn dữ liệu.
@@ -155,3 +185,87 @@ def get_all_symbols(source='VCI'):
     stock = Vnstock().stock(symbol='ACB', source=source)
     return stock.listing.all_symbols()
 
+
+def calculate_rsi(series, period=14):
+    delta = series.diff(1)
+    gain = (delta.where(delta > 0, 0)).rolling(window=period, min_periods=1).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period, min_periods=1).mean()
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+def calculate_macd(series, short_window=12, long_window=26, signal_window=9):
+    short_ema = series.ewm(span=short_window, adjust=False).mean()
+    long_ema = series.ewm(span=long_window, adjust=False).mean()
+    macd = short_ema - long_ema
+    signal = macd.ewm(span=signal_window, adjust=False).mean()
+    return macd, signal
+
+def calculate_atr(high, low, close, period=14):
+    high_low = high - low
+    high_close = np.abs(high - close.shift(1))
+    low_close = np.abs(low - close.shift(1))
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    atr = tr.rolling(window=period, min_periods=1).mean()
+    return atr
+
+def calculate_sma(series, window=50):
+    return series.rolling(window=window).mean()
+
+def calculate_ema(series, window=20):
+    return series.ewm(span=window, adjust=False).mean()
+
+
+def trade_signal_analysis(df_stock):
+    if df_stock is None or df_stock.empty:
+        st.warning("Không có dữ liệu để phân tích.")
+        return
+    
+    df_stock['RSI'] = calculate_rsi(df_stock['close'])
+    df_stock['MACD'], df_stock['Signal'] = calculate_macd(df_stock['close'])
+    df_stock['ATR'] = calculate_atr(df_stock['high'], df_stock['low'], df_stock['close'])
+    df_stock['SMA_50'] = calculate_sma(df_stock['close'], 50)
+    df_stock['EMA_20'] = calculate_ema(df_stock['close'], 20)
+    
+    df_stock['Buy_Signal'] = (df_stock['RSI'] < 30) & (df_stock['MACD'] > df_stock['Signal'])
+    df_stock['Sell_Signal'] = (df_stock['RSI'] > 70) & (df_stock['MACD'] < df_stock['Signal'])
+    
+    df_stock['Signal_Type'] = np.where(df_stock['Buy_Signal'], 'Buy',
+                                       np.where(df_stock['Sell_Signal'], 'Sell', 'Neutral'))
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df_stock['time'], y=df_stock['close'],
+                              mode='lines', name='Giá Đóng Cửa',
+                              line=dict(color='royalblue', width=2)))
+    
+    buy_signals = df_stock[df_stock['Buy_Signal']]
+    sell_signals = df_stock[df_stock['Sell_Signal']]
+    
+    fig.add_trace(go.Scatter(x=buy_signals['time'], y=buy_signals['close'],
+                              mode='markers', name='Mua',
+                              marker=dict(symbol='triangle-up', size=10, color='green')))
+    
+    fig.add_trace(go.Scatter(x=sell_signals['time'], y=sell_signals['close'],
+                              mode='markers', name='Bán',
+                              marker=dict(symbol='triangle-down', size=10, color='red')))
+    
+    fig.update_xaxes(
+        title_text='Date', rangeslider_visible=False,
+        rangeselector=dict(
+            buttons=[
+                dict(count=1, label="1m", step="month", stepmode="backward"),
+                dict(count=3, label="3m", step="month", stepmode="backward"),
+                dict(count=6, label="6m", step="month", stepmode="backward"),
+                dict(count=1, label="YTD", step="year", stepmode="todate"),
+                dict(count=1, label="1y", step="year", stepmode="backward"),
+                dict(count=5, label="5y", step="year", stepmode="backward"),
+                dict(step="all")
+            ]
+        )
+    )
+    
+    fig.update_layout(title="Tín Hiệu Mua/Bán Dựa Trên Chỉ Báo Kỹ Thuật",
+                      xaxis_title="Thời Gian", yaxis_title="Giá Đóng Cửa",
+                      template="plotly_dark", height=600, width=900)
+    
+    st.plotly_chart(fig, use_container_width=True)

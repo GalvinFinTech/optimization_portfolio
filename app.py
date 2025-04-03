@@ -15,80 +15,22 @@ from plotly.subplots import make_subplots
 from vnstock import Screener, Vnstock
 from vnstock.explorer.vci import Company
 import concurrent.futures
+import plotly.graph_objects as go
 
 
 
 from portfolio.stock_analysis import generate_stock_analysis
 from portfolio.optimize import optimize_portfolio, display_results
-from portfolio.utils import fetch_vnindex_data
+from portfolio.utils import fetch_vnindex_data, get_company_news, get_company_events,get_reports
 
-from data.loader import (
-    get_financial_ratios, get_company_table, fetch_and_prepare_data,get_cash_flow,get_income_statement,
+from data.loader import (trade_signal_analysis,
+    get_financial_ratios, get_company_table, fetch_and_prepare_data,get_cash_flow,get_income_statement,get_ratios,
     get_balance_sheet, get_officers_info, get_subsidiaries_info, get_shareholders_info, get_all_symbols)
 from charts.plots import (
-    plot_price_volume,plot_accounting_balance,plot_business_results,plot_cash_flow,plot_capital_structure,
+    plot_price_volume,plot_accounting_balance,plot_business_results,plot_cash_flow,plot_capital_structure,plot_metric,
     plot_asset_structure,plot_profit_structure,plot_financial_ratios,plot_operating_efficiency,plot_leverage_ratios,plot_pe_ratio,
     plot_pb_ratio,dupont_analysis_plot,plot_combined_charts,plot_stock_vs_vnindex, visualize_analysis)
 
-
-
-def main():
-    st.set_page_config(page_title="Stock Dashboard", page_icon="📈", layout="wide")
-    # Thêm CSS tùy chỉnh cho trang và sidebar
-    st.markdown(
-        """
-        <style>
-            body {
-                background-color: #f0f2f5;  /* Màu nền sáng xám */
-            }
-            .header {
-                text-align: center;
-                background: linear-gradient(135deg, #1e1e1e, #333333); 
-                padding: 20px; 
-                border-radius: 12px;
-                color: white;
-            }
-            .sidebar .sidebar-content {
-                background-color: #4e73df;  /* Màu nền cho sidebar */
-                color: white;  /* Màu chữ trong sidebar */
-            }
-            .sidebar .sidebar-content .st-selectbox, .sidebar .sidebar-content .st-button {
-                color: #ffffff;  /* Màu chữ cho các nút và selectbox */
-            }
-            .sidebar .sidebar-content .st-selectbox select {
-                background-color: #007bff;  /* Màu nền cho selectbox */
-                color: white;
-            }
-            .stock-info {
-                font-size: 18px;
-                font-weight: bold;
-                color: #2c3e50; /* Một màu tối cho thông tin */
-            }
-            .column {
-                border: 1px solid #ddd;  /* Đường viền nhẹ */
-                border-radius: 5px;
-                padding: 15px;
-                margin: 10px;
-                background-color: white;  /* Nền trắng cho cột */
-                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);  /* Đổ bóng cho cột */
-            }
-            .highlight {
-                color: green;
-            }
-            .alert {
-                color: red;
-            }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-    logo_path = "LOGO.png"  # Điền đúng đường dẫn đến logo của bạn
-    st.sidebar.image(logo_path, use_container_width=True)  # Hiển thị logo trong sidebar
-
-     # Thêm banner/header
-    banner_path = "banner.png"  # Điền đúng đường dẫn đến ảnh header của bạn
-    st.image(banner_path, use_container_width=True)  # Hiển thị banner ở header
-    # Thêm tiêu đề cho ứng dụng
 
 
 
@@ -163,6 +105,7 @@ def get_safe_value(df, column):
     if column in df.columns and not df[column].isna().all():
         return df[column].iloc[0]  # Lấy giá trị đầu tiên
     return 'N/A'  # Trả về 'N/A' nếu cột không tồn tại hoặc không có dữ liệu
+
 
 def display_general_info(df_stock, df_insights):
     # Chia layout thành 2 cột: giá cổ phiếu (trái), chỉ số tài chính (phải)
@@ -295,7 +238,6 @@ def get_user_inputs():
 
     return symbols, viewdict, confidences, investment_goal, target_return, total_value
 
-
 def portfolio_optimization_tool(symbols, viewdict, confidences, investment_goal, target_return, total_value):
     # Xác định khoảng thời gian lấy dữ liệu (5 năm gần nhất)
     end_date = datetime.today().strftime('%Y-%m-%d')
@@ -327,22 +269,39 @@ def portfolio_optimization_tool(symbols, viewdict, confidences, investment_goal,
 @st.cache_data
 def get_financial_data(tickers):
     stock_data = []
+    # Danh sách các cột cần thiết
+    required_columns = [
+        ('Chỉ tiêu định giá', 'Vốn hóa (Tỷ đồng)'),
+        ('Chỉ tiêu định giá', 'P/B'),
+        ('Chỉ tiêu khả năng sinh lợi', 'ROE (%)'),
+        ('Chỉ tiêu định giá', 'P/E'),
+        ('Chỉ tiêu khả năng sinh lợi', 'ROA (%)')
+    ]
+    
     for ticker in tickers:
         stock = Vnstock().stock(symbol=ticker, source='VCI')
         finance_ratios = stock.finance.ratio(period='year', lang='vi', dropna=True).head(1)
         
-        # Lấy giá trị từ các cột MultiIndex
-        data = {
-            'CP': ticker,  # Sửa lại để sử dụng ticker, không phải code
-            'Vốn hóa (Tỷ đồng)': finance_ratios[('Chỉ tiêu định giá', 'Vốn hóa (Tỷ đồng)')].values[0] / 1e3,  # Chuyển đổi từ tỷ đồng
-            'P/B': finance_ratios[('Chỉ tiêu định giá', 'P/B')].values[0],
-            'ROE': finance_ratios[('Chỉ tiêu khả năng sinh lợi', 'ROE (%)')].values[0],
-            'P/E': finance_ratios[('Chỉ tiêu định giá', 'P/E')].values[0],
-            'ROA': finance_ratios[('Chỉ tiêu khả năng sinh lợi', 'ROA (%)')].values[0]
-        }
-        stock_data.append(data)
+        # Kiểm tra xem cổ phiếu có đầy đủ các cột cần thiết không
+        if all(col in finance_ratios.columns for col in required_columns):
+            data = {
+                'CP': ticker,  # Sử dụng ticker thay vì code
+                'Vốn hóa (Tỷ đồng)': finance_ratios[('Chỉ tiêu định giá', 'Vốn hóa (Tỷ đồng)')].values[0] / 1e3,  # Chuyển đổi từ tỷ đồng
+                'P/B': finance_ratios[('Chỉ tiêu định giá', 'P/B')].values[0],
+                'ROE': finance_ratios[('Chỉ tiêu khả năng sinh lợi', 'ROE (%)')].values[0],
+                'P/E': finance_ratios[('Chỉ tiêu định giá', 'P/E')].values[0],
+                'ROA': finance_ratios[('Chỉ tiêu khả năng sinh lợi', 'ROA (%)')].values[0]
+            }
+            stock_data.append(data)
+        else:
+            # In ra các cổ phiếu thiếu cột cần thiết
+            missing_columns = [col for col in required_columns if col not in finance_ratios.columns]
+            print(f"Cổ phiếu {ticker} thiếu các cột: {missing_columns}. Bỏ qua cổ phiếu này.")
     
     return pd.DataFrame(stock_data)
+
+
+
 
 @st.cache_data
 def get_same_industry_stocks(code):
@@ -369,19 +328,7 @@ def phan_tich_nganh(code):
     fig = create_chart(screener_df, value_col, chart_type.lower(), width, height)
     st.plotly_chart(fig)
     
-    # Nhập mã cổ phiếu
-    # Kiểm tra các cổ phiếu trong cùng ngành với cổ phiếu quan tâm (FPT mặc định)
-    #code = st.text_input('Nhập mã cổ phiếu:', 'FPT').upper()
-    #fpt_industry = screener_df[screener_df['ticker'] == code]['industry'].values[0]
-    #same_industry_stocks = screener_df[screener_df['industry'] == fpt_industry]
     same_industry_stocks = get_same_industry_stocks(code)
-
-    
-    #st.write(f"Ngành của cổ phiếu {code}: {fpt_industry}")
-    #st.write("Các cổ phiếu cùng ngành:")
-    #st.dataframe(same_industry_stocks[['ticker', 'industry']])
-    
-    # Lọc dữ liệu tài chính cho các cổ phiếu trong ngành
     df_stocks = get_financial_data(same_industry_stocks)
 
     # Cho phép người dùng chọn các cổ phiếu hiển thị
@@ -409,7 +356,8 @@ def phan_tich_nganh(code):
         color_continuous_scale="Rainbow", 
         size_max=120,
         hover_name="CP", 
-        hover_data={selected_x: True, selected_y: True, "Vốn hóa (Tỷ đồng)": True, "CP": False}
+        hover_data={selected_x: True, selected_y: True, "Vốn hóa (Tỷ đồng)": True, "CP": False},
+    
     )
 
     fig_scatter.update_layout(
@@ -471,17 +419,139 @@ def phan_tich_cp(code, df_stock, df_vnindex,df_insights):
         plot_price_volume(df_stock)
 
     # Tạo các tab trong trang "Phân tích cổ phiếu"
-    t1, t2, t3, t4, t5, t6= st.tabs([
-       "Tổng quan", "Phân tích 360", "Phân tích kĩ thuật",
+    t0, t1, t2, t3, t4, t5, t6= st.tabs([
+       "Tổng quan","Tin tức & Sự kiện" ,  "Phân tích 360", "Phân tích kĩ thuật",
         "Tài chính","Dữ liệu","Hồ sơ"])
 
 
-    with t1:
+    with t0:
         # 🔹 Hiển thị biểu đồ chứng khoán so với VN-Index
         visualize_analysis(screener_df,code)
     
+    with t1:
+        # Tạo layout chia cột cho các phần tin tức, sự kiện và báo cáo
+        # Tiêu đề và giới thiệu
+        st.markdown("""
+        <style>
+            .title {
+                font-size: 24px;
+                font-weight: bold;
+                color: #2D3748;
+            }
+            .section {
+                margin-top: 20px;
+                margin-bottom: 20px;
+            }
+        </style>
+        """, unsafe_allow_html=True)
+        col1, col2= st.columns([3,1])
+                # Lấy và hiển thị báo cáo phân tích công tyr
+        with col1:
+   
+            # Hiển thị kết quả trên Streamlit
+            # Hiển thị kết quả trên Streamlit
+            d1 = get_reports(code)
+
+             # Kiểm tra nếu không có dữ liệu báo cáo
+            if isinstance(d1, str) and d1 == "Chưa có báo cáo":
+                st.markdown("### Báo cáo phân tích công ty")
+                st.write("**Chưa có báo cáo**")
+
+            else:
+                # Chuyển các cột chứa HTML thành dạng Markdown để hiển thị
+                for index, row in d1.iterrows():
+                    row['Nguồn'] = f"<a href='{row['Nguồn']}' target='_blank'>{row['Nguồn']}</a>"
+                    row['Tải về'] = f"<a href='{row['Tải về']}' target='_blank'>Tải về</a>"
+
+                # Hiển thị tiêu đề
+                st.markdown("<h3 style='text-align:center; color: #ffffff;'>Báo cáo phân tích công ty</h3>", unsafe_allow_html=True)
+
+                # Định dạng bảng với CSS cho theme dark
+                html_table = d1.to_html(escape=False)
+
+                # Áp dụng CSS để tạo bảng với tông màu đen xám
+                custom_css = """
+                    <style>
+                        table {
+                            font-size: 14px; /* Chỉnh kích thước chữ */
+                            width: 100%;
+                            border-collapse: collapse;
+                            background-color: #333; /* Nền bảng tối */
+                            color: #ddd; /* Màu chữ sáng */
+                        }
+                        th, td {
+                            padding: 10px;
+                            text-align: left;
+                            border-bottom: 1px solid #444; /* Viền bảng màu xám đậm */
+                        }
+                        th {
+                            background-color: #555; /* Nền tiêu đề bảng xám đậm */
+                            color: #fff; /* Chữ tiêu đề sáng */
+                        }
+                        tr:nth-child(even) {
+                            background-color: #444; /* Nền hàng chẵn xám đậm */
+                        }
+                        tr:hover {
+                            background-color: #666; /* Nền khi hover */
+                        }
+                        a {
+                            color: #1E90FF; /* Màu liên kết sáng */
+                            text-decoration: none;
+                        }
+                        a:hover {
+                            text-decoration: underline; /* Hiệu ứng underline khi hover vào liên kết */
+                        }
+                    </style>
+                """
+
+                # Thêm CSS vào bảng HTML và hiển thị
+                st.markdown(custom_css, unsafe_allow_html=True)
+                st.markdown(html_table, unsafe_allow_html=True)
+
+
+                    
+            #st.markdown("<h3><b>Báo Cáo Phân Tích Công Ty</b></h3>", unsafe_allow_html=True)
+            #reports_df = reports(code)
+            #for index, row in reports_df.iterrows():
+                #st.markdown(f"- {row['Tên Báo Cáo']}", unsafe_allow_html=True)
+                #st.markdown(f"  *Ngày: {row['Ngày']}* - {row['Mô Tả']}")
+
+
+           
+        with col2:
+            #st.markdown("<h3><b>Báo Cáo Phân Tích Công Ty</b></h3>", unsafe_allow_html=True)
+            #reports_df = get_company_reports(code)
+            #for index, row in reports_df.iterrows():
+                #st.markdown(f"- {row['Tên Báo Cáo']}", unsafe_allow_html=True)
+                #st.markdown(f"  *Ngày: {row['Ngày']}* - {row['Mô Tả']}")
+
+            # Lấy và hiển thị tin tức công ty
+            st.markdown("<h3><b>Tin Tức Công Ty</b></h3>", unsafe_allow_html=True)
+            news_df = get_company_news(code)
+            for index, row in news_df.iterrows():
+                st.markdown(f"- {row['Tiêu đề Tin Tức']}", unsafe_allow_html=True)
+
+            # Lấy và hiển thị sự kiện công ty
+            st.markdown("<h3><b>Sự Kiện Công Ty</b></h3>", unsafe_allow_html=True)
+            events_df = get_company_events(code)
+            for index, row in events_df.iterrows():
+                st.markdown(f"- {row['Tiêu đề Sự Kiện']}", unsafe_allow_html=True)
+
+
+   
+        
+        
+    
     with t2: 
         plot_stock_vs_vnindex(df_stock, df_vnindex, code)
+        with st.expander("CHỉ tiêu tài chính"):
+            df_ratio = get_ratios(code)
+            if df_ratio is not None:
+                st.subheader(f"Dữ liệu tài chính của {code}")
+                st.dataframe(df_ratio)
+                # Vẽ từng chỉ tiêu riêng lẻ
+                plot_metric(df_ratio, code)
+        
 
 
     with t3:
@@ -499,18 +569,48 @@ def phan_tich_cp(code, df_stock, df_vnindex,df_insights):
 
         st.markdown("<hr>", unsafe_allow_html=True)
 
+        trade_signal_analysis(df_stock)
+        # Hiển thị ghi chú
+        st.markdown("""
+        🔍 **Cách xây dựng tín hiệu mua/bán**  
+        Mình đang sử dụng 5 chỉ báo kỹ thuật chính để xác định tín hiệu giao dịch:
+        - **RSI (Relative Strength Index)**: Xác định trạng thái quá mua/quá bán.
+        - **MACD (Moving Average Convergence Divergence)**: Đánh giá động lượng xu hướng.
+        - **ATR (Average True Range)**: Đo lường độ biến động giá.
+        - **SMA (Simple Moving Average)**: Trung bình động đơn giản.
+        - **EMA (Exponential Moving Average)**: Trung bình động hàm mũ.
+
+        ✅ **Điều kiện kích hoạt tín hiệu**  
+        📈 **Tín hiệu mua (Buy Signal)**:
+        - RSI < 30 (Cổ phiếu đang bị bán quá mức).
+        - MACD cắt lên Signal Line (Báo hiệu xu hướng tăng).
+        - Giá cắt lên EMA 20 (Xác nhận đà tăng giá).
+        - ATR tăng cao (Thị trường có biến động mạnh, tăng khả năng đảo chiều).
+        👉 Nếu các điều kiện trên thỏa mãn cùng lúc, tạo tín hiệu mua.
+
+        📉 **Tín hiệu bán (Sell Signal)**:
+        - RSI > 70 (Cổ phiếu đang bị mua quá mức).
+        - MACD cắt xuống Signal Line (Báo hiệu xu hướng giảm).
+        - Giá cắt xuống EMA 20 (Xác nhận xu hướng giảm).
+        - ATR tăng cao (Biến động lớn có thể dẫn đến đảo chiều).
+        👉 Nếu các điều kiện trên thỏa mãn cùng lúc, tạo tín hiệu bán.
+                    
+        📈 **Kết Hợp Các Chỉ Báo – Giảm Sai Số**:
+        - 👉 Không có chỉ báo nào hoàn hảo! Do đó, mình kết hợp RSI + MACD + ATR + EMA để:
+        - Giảm tín hiệu nhiễu.
+        - Tăng xác suất giao dịch chính xác.
+        - Lọc tín hiệu giao dịch đáng tin cậy hơn.          
+        """)
+        
+
         # Giả sử df_stock là DataFrame chứa dữ liệu thị trường với các cột 'time', 'open', 'close', 'volume'
         plot_combined_charts(df_stock, sma_windows, ema_windows)
             
     with t4:
-        st.subheader("Phân Tích Kết Quả Tài Chính")
-
-        # Tạo các expander để phát hiện và hiển thị từng biểu đồ
-        with st.expander("Cấu Trúc Vốn"):
-            plot_capital_structure(df_balance)
-
-        with st.expander("Cấu Trúc Tài Sản"):
-            plot_asset_structure(df_balance)
+    
+        
+        with st.expander("Dòng tiền"):
+            plot_cash_flow(df_cash_flow)
 
         with st.expander("Bảng Cân Đối Kế Toán"):
             plot_accounting_balance(df_balance)
@@ -518,12 +618,7 @@ def phan_tich_cp(code, df_stock, df_vnindex,df_insights):
         with st.expander("Kết Quả Kinh Doanh"):
             plot_business_results(df_income_statement)
 
-        with st.expander("Lưu Chuyển Tiền Tệ"):
-            plot_cash_flow(df_cash_flow)
-
-        with st.expander("Cấu Trúc Lợi Nhuận"):
-            plot_profit_structure(df_income_statement)
-
+  
         # Thêm một số thông báo hỗ trợ, nhắc nhở người dùng về nội dung
         st.markdown("Bạn có thể mở các phần để xem biểu đồ chi tiết hơn. Di chuyển chuột qua các phần để xem thông tin rõ hơn.")
     with t5:
@@ -600,7 +695,7 @@ def phan_tich_cp(code, df_stock, df_vnindex,df_insights):
             except Exception as e:
                 st.error(f"Không có dữ liệu công ty con")
 
-                
+          
 def main():
     st.set_page_config(page_title="Stock Dashboard", page_icon="📈", layout="wide")
     # Thêm CSS tùy chỉnh cho trang và sidebar
@@ -658,9 +753,8 @@ def main():
         unsafe_allow_html=True
     )
     logo_path = "LOGO.png"  # Điền đúng đường dẫn đến logo của bạn
-    st.sidebar.image(logo_path, use_container_width=True)  # Hiển thị logo trong sidebar
+    st.sidebar.image(logo_path)  # Hiển thị logo trong sidebar
 
-    
 
 
      # Thêm banner/header
@@ -668,10 +762,14 @@ def main():
     st.image(banner_path)  # Hiển thị banner ở header
     
 
-    symbols = get_all_symbols() 
-    default_index = next((i for i, symbol in enumerate(symbols) if symbol.strip().upper() == "FPT"), 0)
-    code = st.selectbox("Chọn mã cổ phiếu", options=symbols, index=default_index)
-    
+    symbols = get_all_symbols()
+
+    if "FPT" in symbols:
+        default_index = symbols.index("FPT")
+    else:
+        default_index = 0
+
+    code = st.selectbox("Chọn mã cổ phiếu", options=symbols, index=default_index, key="stock_selector")
 
        
     # Xác định khoảng thời gian (5 năm gần đây)

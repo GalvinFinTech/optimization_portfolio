@@ -16,3 +16,4 @@ pyyaml
 bcrypt
 PyPortfolioOpt
 altair
+re

@@ -7,6 +7,85 @@ import inspect
 import numpy as np
 from plotly.subplots import make_subplots
 
+import plotly.graph_objects as go
+import streamlit as st
+
+import plotly.graph_objects as go
+import streamlit as st
+
+def plot_metric(df, stock_code):
+    """
+    Hiển thị biểu đồ cực xịn với giao diện mượt mà, đẹp mắt, hiệu ứng hover cao cấp và thêm HTML để làm nổi bật thông tin.
+    """
+    if df is None or df.empty:
+        st.warning(f"Không có dữ liệu để vẽ biểu đồ cho {stock_code}.")
+        return
+    
+    # Lọc các cột số để vẽ biểu đồ (trừ 'Năm' và 'CP')
+    numeric_cols = [col for col in df.columns if col not in ['Năm', 'CP','Kỳ']]
+
+    # Chọn chỉ tiêu cần vẽ
+    selected_metrics = st.multiselect("🎯 Chọn các chỉ tiêu để vẽ:", options=numeric_cols, default=numeric_cols[:3])
+
+    for metric in selected_metrics:
+        # HTML tiêu đề mô tả
+        html_title = f"<h3 style='color: #00C9FF; text-align: center;'>📊 {metric} của {stock_code}</h3>"
+        html_subtitle = f"<p style='color: #666; text-align: center;'>Biểu đồ này thể hiện {metric} qua các năm.</p>"
+
+        # Hiển thị HTML tiêu đề và mô tả
+        st.markdown(html_title, unsafe_allow_html=True)
+        st.markdown(html_subtitle, unsafe_allow_html=True)
+
+        fig = go.Figure()
+
+        # Tạo màu sắc gradient tươi sáng hơn (sử dụng dải màu đỏ - xanh)
+        color_scale = ["#FF6347", "#32CD32"]  # Gradient từ đỏ đến xanh lá
+
+        # Vẽ đường chính với hiệu ứng gradient
+        fig.add_trace(go.Scatter(
+            x=df["Năm"], 
+            y=df[metric], 
+            mode='lines+markers', 
+            name=metric,
+            line=dict(width=4, shape='spline', color=color_scale[0]),  # Đường cong mượt mà
+            marker=dict(size=10, symbol='circle', line=dict(width=2, color=color_scale[1])),
+            hoverinfo='text',  # Hiển thị thông tin theo dạng custom
+            hovertemplate=(
+                f"<b>{metric}</b><br>"  # In tên chỉ tiêu
+                "Năm: %{x}<br>"  # Hiển thị năm
+                "Giá trị: %{y:.2f}<br>"  # Hiển thị giá trị với 2 chữ số thập phân
+                "<extra></extra>"  # Loại bỏ phần "trace 1:" và những thông tin không cần thiết
+            )
+        ))
+
+        # Cấu hình layout cho giao diện đẹp
+        fig.update_layout(
+            title=f"📊 {metric} của {stock_code}",
+            xaxis_title="Năm",
+            yaxis_title="Giá trị",
+            hovermode="x unified",  # Hiển thị giá trị tại các điểm trên cùng một trục x
+            margin=dict(l=40, r=40, t=60, b=40),
+            plot_bgcolor="rgba(0,0,0,0)",  # Nền trong suốt
+            paper_bgcolor="rgba(0,0,0,0)",  # Nền trong suốt
+            font=dict(family="Arial, sans-serif", size=14),
+            xaxis=dict(showgrid=True, gridwidth=0.5, gridcolor="gray"),
+            yaxis=dict(showgrid=True, gridwidth=0.5, gridcolor="gray"),
+        )
+
+        # Hiệu ứng bóng mờ cho đường line và tạo động tác mượt mà
+        fig.update_traces(line=dict(width=4, dash="solid", shape="spline"))
+
+        # Cập nhật màu sắc background và trục
+        fig.update_layout(
+            xaxis=dict(showline=True, linewidth=2, linecolor='white', tickangle=45),
+            yaxis=dict(showline=True, linewidth=2, linecolor='white'),
+        )
+
+        # Hiển thị biểu đồ
+        st.plotly_chart(fig, use_container_width=True)
+
+
+
 
 
 
@@ -433,8 +512,8 @@ def plot_accounting_balance(df):
 # Biểu đồ kết quả kinh doanh
 def plot_business_results(df):
     fig = go.Figure()
-    fig.add_trace(go.Bar(x=df.index, y=df['Doanh thu thuần'], name='Doanh thu thuần', marker_color='rgb(250,50,50)'))
-    fig.add_trace(go.Bar(x=df.index, y=df['Lợi nhuận sau thuế của Cổ đông công ty mẹ (đồng)'], name='Lợi nhuận sau thuế', marker_color='rgb(0,200,0)'))
+    fig.add_trace(go.Bar(x=df.index, y=df['Doanh thu (đồng)'], name='Doanh thu', marker_color='rgb(250,50,50)'))
+    fig.add_trace(go.Bar(x=df.index, y=df['Lợi nhuận thuần'], name='Lợi nhuận sau thuế', marker_color='rgb(0,200,0)'))
     fig.update_layout(title='Kết quả kinh doanh', barmode='group')
     # Hiển thị biểu đồ trên Streamlit
     function_name = inspect.currentframe().f_code.co_name  # Lấy tên hàm
@@ -455,39 +534,74 @@ def plot_cash_flow(df):
     st.plotly_chart(fig, use_container_width=True,key=f"chart_{function_name}")
 
 
-def plot_capital_structure(df_balance):
-    df_balance = df_balance.reset_index()
-    df_melted = pd.melt(df_balance, id_vars=['Năm'], value_vars=[
-        'NỢ PHẢI TRẢ (đồng)', 'Nợ ngắn hạn (đồng)', 'Nợ dài hạn (đồng)',
+
+
+def plot_capital_structure(df_balance, stock_code):
+    """
+    Vẽ biểu đồ cấu trúc nguồn vốn cho từng cổ phiếu. 
+    Chỉ hiển thị nếu dữ liệu đầy đủ.
+    """
+    required_columns = [
+        'Năm', 'NỢ PHẢI TRẢ (đồng)', 'Nợ ngắn hạn (đồng)', 'Nợ dài hạn (đồng)',
         'VỐN CHỦ SỞ HỮU (đồng)', 'Vốn góp của chủ sở hữu (đồng)',
         'Vay và nợ thuê tài chính dài hạn (đồng)',
         'Vay và nợ thuê tài chính ngắn hạn (đồng)',
         'TỔNG CỘNG NGUỒN VỐN (đồng)'
-    ], var_name='Loại', value_name='Giá trị')
+    ]
     
-    df_balance['Tỷ số Nợ vay trên Tổng nguồn vốn'] = (
-        df_balance['Vay và nợ thuê tài chính ngắn hạn (đồng)'] +
-        df_balance['Vay và nợ thuê tài chính dài hạn (đồng)']) / df_balance['TỔNG CỘNG NGUỒN VỐN (đồng)']
+    # Kiểm tra xem có đủ cột dữ liệu không
+    if not all(col in df_balance.columns for col in required_columns):
+        st.warning(f"Dữ liệu cho cổ phiếu {stock_code} không đầy đủ. Bỏ qua!")
+        return
+
+    # Lọc dữ liệu theo cổ phiếu đang chọn
+    df_filtered = df_balance[df_balance['Mã CK'] == stock_code]
     
+    if df_filtered.empty:
+        st.warning(f"Không có dữ liệu cho cổ phiếu {stock_code}.")
+        return
+
+    # Reset index để tránh lỗi khi vẽ biểu đồ
+    df_filtered = df_filtered.reset_index(drop=True)
+
+    # Chuyển đổi dữ liệu để phù hợp với Plotly
+    df_melted = pd.melt(df_filtered, id_vars=['Năm'], value_vars=required_columns[1:], 
+                         var_name='Loại', value_name='Giá trị')
+
+    # Tính tỷ số Nợ vay trên Tổng nguồn vốn
+    df_filtered['Tỷ số Nợ vay trên Tổng nguồn vốn'] = (
+        df_filtered['Vay và nợ thuê tài chính ngắn hạn (đồng)'] +
+        df_filtered['Vay và nợ thuê tài chính dài hạn (đồng)']
+    ) / df_filtered['TỔNG CỘNG NGUỒN VỐN (đồng)']
     
-    
-    df_melted.sort_values(by='Năm', inplace=True)
+    # Vẽ biểu đồ
     fig = go.Figure()
+    
+    # Vẽ các cột stacked bar
     for loai in df_melted['Loại'].unique():
         fig.add_trace(go.Bar(
             x=df_melted[df_melted['Loại'] == loai]['Năm'],
             y=df_melted[df_melted['Loại'] == loai]['Giá trị'],
             name=loai
         ))
-    fig.add_trace(go.Scatter(x=df_balance['Năm'], y=df_balance['Tỷ số Nợ vay trên Tổng nguồn vốn'], mode='lines+markers',
-                             name='Tỉ lệ Nợ vay/TTS', yaxis='y2'))
-    fig.update_layout(yaxis2=dict(anchor='x', overlaying='y', side='right'))
+
+    # Vẽ đường tỷ lệ Nợ vay / Tổng nguồn vốn
+    fig.add_trace(go.Scatter(
+        x=df_filtered['Năm'], 
+        y=df_filtered['Tỷ số Nợ vay trên Tổng nguồn vốn'], 
+        mode='lines+markers',
+        name='Tỉ lệ Nợ vay/TTS', 
+        yaxis='y2'
+    ))
+
+    # Cấu hình layout
     fig.update_layout(
+        yaxis2=dict(anchor='x', overlaying='y', side='right'),
         barmode='stack',
         xaxis_tickmode='linear',
         xaxis_title='Năm',
         yaxis_title='Giá trị (tỷ đồng)',
-        title='NGUỒN VỐN',
+        title=f'NGUỒN VỐN - {stock_code}',
         updatemenus=[{
             'active': 0,
             'buttons': [
@@ -502,10 +616,11 @@ def plot_capital_structure(df_balance):
             'yanchor': 'top'
         }]
     )
+
     # Hiển thị biểu đồ trên Streamlit
     function_name = inspect.currentframe().f_code.co_name  # Lấy tên hàm
-    # Hiển thị biểu đồ trên Streamlit
-    st.plotly_chart(fig, use_container_width=True,key=f"chart_{function_name}")
+    st.plotly_chart(fig, use_container_width=True, key=f"chart_{function_name}_{stock_code}")
+
 
 
 def plot_asset_structure(df_balance):
@@ -564,6 +679,9 @@ def plot_profit_structure(df_kqkd):
     
     fig.add_trace(go.Bar(x=df_kqkd['Năm'], y=df_kqkd['Lãi/Lỗ từ hoạt động kinh doanh'],
                          name='Lãi/lỗ từ hoạt động kinh doanh', marker_color=px.colors.qualitative.Plotly[2]))
+    
+    fig.add_trace(go.Bar(x=df_kqkd['Năm'], y=df_kqkd['Lãi/lỗ từ công ty liên doanh'],
+                         name='Lãi/lỗ từ công ty liên doanh', marker_color=px.colors.qualitative.Plotly[2]))
                     
     fig.add_trace(go.Bar(x=df_kqkd['Năm'], y=df_kqkd['Lợi nhuận khác'],
                          name='Lợi nhuận khác', marker_color=px.colors.qualitative.Plotly[4]))
@@ -731,32 +849,98 @@ def visualize_analysis(screener_df, code):
         st.warning(f"Không tìm thấy dữ liệu cho mã cổ phiếu {code}")
         return
     
+    # Lấy ngành của cổ phiếu đã chọn
     industry = df_selected['industry'].values[0]
+    
+    # Lọc các cổ phiếu trong cùng ngành
     df_filtered = screener_df[screener_df['industry'] == industry]
     
+    # Radar chart cho cổ phiếu đã chọn
     data1 = df_selected[['ticker', 'business_operation', 'business_model', 'financial_health', 'beta', 'stock_rating']]
     data1.columns = ['Mã', 'Hiệu suất kinh doanh', 'Mô hình kinh doanh', 'Sức khỏe tài chính', 'Rủi ro hệ thống', 'Xếp hạng định giá']
-    
     display_radar_chart(data1, f'Biểu đồ Radar - Đánh giá {code}', 'blue')
     
+    # Hiển thị các biểu đồ cho từng cổ phiếu nếu có dữ liệu
     with st.expander("📊 Hiệu Quả Hoạt Động"):
-        display_bar_chart(df_filtered, 'ticker', 'roe', 'ROE của ngành')
-        display_bar_chart(df_filtered, 'ticker', 'gross_margin', 'Biên lợi nhuận gộp của ngành')
-        display_bar_chart(df_filtered, 'ticker', 'net_margin', 'Biên lợi nhuận ròng của ngành')
-        display_bar_chart(df_filtered, 'ticker', 'eps', 'EPS của ngành')
+        # Lọc dữ liệu của cổ phiếu đã chọn
+        if pd.notnull(df_selected['roe'].values[0]):
+            display_bar_chart(df_filtered, 'ticker', 'roe', 'ROE của ngành')
+        if pd.notnull(df_selected['gross_margin'].values[0]):
+            display_bar_chart(df_filtered, 'ticker', 'gross_margin', 'Biên lợi nhuận gộp của ngành')
+        if pd.notnull(df_selected['net_margin'].values[0]):
+            display_bar_chart(df_filtered, 'ticker', 'net_margin', 'Biên lợi nhuận ròng của ngành')
+        if pd.notnull(df_selected['eps'].values[0]):
+            display_bar_chart(df_filtered, 'ticker', 'eps', 'EPS của ngành')
     
     with st.expander("💰 Sức Khỏe Tài Chính"):
-        display_bar_chart(df_filtered, 'ticker', 'financial_health', 'Sức khỏe tài chính của ngành')
-        display_bar_chart(df_filtered, 'ticker', 'doe', 'Tỷ lệ nợ trên vốn chủ sở hữu')
+        if pd.notnull(df_selected['financial_health'].values[0]):
+            display_bar_chart(df_filtered, 'ticker', 'financial_health', 'Sức khỏe tài chính của ngành')
+        if pd.notnull(df_selected['doe'].values[0]):
+            display_bar_chart(df_filtered, 'ticker', 'doe', 'Tỷ lệ nợ trên vốn chủ sở hữu')
     
     with st.expander("📈 Định Giá"):
-        display_bar_chart(df_filtered, 'ticker', 'pe', 'Chỉ số P/E của ngành')
-        display_bar_chart(df_filtered, 'ticker', 'pb', 'Chỉ số P/B của ngành')
-        display_bar_chart(df_filtered, 'ticker', 'ev_ebitda', 'EV/EBITDA của ngành')
+        if pd.notnull(df_selected['pe'].values[0]):
+            display_bar_chart(df_filtered, 'ticker', 'pe', 'Chỉ số P/E của ngành')
+        if pd.notnull(df_selected['pb'].values[0]):
+            display_bar_chart(df_filtered, 'ticker', 'pb', 'Chỉ số P/B của ngành')
+        if pd.notnull(df_selected['ev_ebitda'].values[0]):
+            display_bar_chart(df_filtered, 'ticker', 'ev_ebitda', 'EV/EBITDA của ngành')
     
     with st.expander("🎯 Cổ Tức"):
-        display_bar_chart(df_filtered, 'ticker', 'dividend_yield', 'Tỷ lệ cổ tức của ngành')
+        if pd.notnull(df_selected['dividend_yield'].values[0]):
+            display_bar_chart(df_filtered, 'ticker', 'dividend_yield', 'Tỷ lệ cổ tức của ngành')
     
     with st.expander("🚀 Tăng Trưởng Lợi Nhuận"):
-        display_bar_chart(df_filtered, 'ticker', 'revenue_growth_1y', 'Tăng trưởng doanh thu 1 năm')
-        display_bar_chart(df_filtered, 'ticker', 'eps_growth_1y', 'Tăng trưởng EPS 1 năm')
+        if pd.notnull(df_selected['revenue_growth_1y'].values[0]):
+            display_bar_chart(df_filtered, 'ticker', 'revenue_growth_1y', 'Tăng trưởng doanh thu 1 năm')
+        if pd.notnull(df_selected['eps_growth_1y'].values[0]):
+            display_bar_chart(df_filtered, 'ticker', 'eps_growth_1y', 'Tăng trưởng EPS 1 năm')
+
+def create_scatter_chart(df_filtered):
+    # Chọn giá trị cho trục x và y
+    selected_x = st.selectbox('Chọn giá trị cho trục X:', ['roe', 'roa'])
+    selected_y = st.selectbox('Chọn giá trị cho trục Y:', ['p/b', 'p/e'])
+
+    # Vẽ biểu đồ scatter cho các cổ phiếu đã chọn
+    fig_scatter = px.scatter(
+        df_filtered, 
+        x=selected_x, 
+        y=selected_y, 
+        size="vốn hóa (tỷ đồng)", 
+        text="cp",
+        color="vốn hóa (tỷ đồng)", 
+        color_continuous_scale="Viridis",
+        size_max=120,
+        hover_name="cp", 
+        hover_data={selected_x: True, selected_y: True, "vốn hóa (tỷ đồng)": True, "cp": False},
+        title=f'So sánh {selected_x} vs {selected_y} của các cổ phiếu cùng ngành',
+    )
+
+    # Thêm dòng xu hướng
+    fig_scatter.add_trace(px.line(df_filtered, x=selected_x, y=selected_y, line_shape='linear').data[0])
+
+    # Tinh chỉnh bố cục và các thuộc tính khác
+    fig_scatter.update_layout(
+        title=dict(
+            text=f'So sánh {selected_x} vs {selected_y} của các cổ phiếu cùng ngành',
+            font=dict(size=24),
+            x=0.5,
+            y=0.95
+        ),
+        xaxis=dict(
+            title=selected_x,
+            gridcolor='LightGrey',
+            zerolinecolor='DarkGrey',
+            zerolinewidth=2
+        ),
+        yaxis=dict(
+            title=selected_y,
+            gridcolor='LightGrey',
+            zerolinecolor='DarkGrey',
+            zerolinewidth=2
+        ),
+        legend=dict(title='Vốn hóa (tỷ đồng)', title_font=dict(size=14)),
+    )
+
+    # Hiển thị biểu đồ
+    st.plotly_chart(fig_scatter, use_container_width=True)
