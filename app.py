@@ -300,28 +300,16 @@ def phan_tich_nganh(code):
     chart_type = 'treemap'  # Biểu đồ mặc định
     value_col = 'market_cap'  # Cột mặc định là market_cap
     
-    # Sử dụng các giá trị mặc định cho chiều rộng và chiều cao
+
     width = 1000
     height = 600
     
-
     # Hiển thị biểu đồ
     fig = create_chart(screener_df, value_col, chart_type.lower(), width, height)
     st.plotly_chart(fig)
     
-    # Nhập mã cổ phiếu
-    # Kiểm tra các cổ phiếu trong cùng ngành với cổ phiếu quan tâm (FPT mặc định)
-    #code = st.text_input('Nhập mã cổ phiếu:', 'FPT').upper()
-    #fpt_industry = screener_df[screener_df['ticker'] == code]['industry'].values[0]
-    #same_industry_stocks = screener_df[screener_df['industry'] == fpt_industry]
     same_industry_stocks = get_same_industry_stocks(code)
 
-    
-    #st.write(f"Ngành của cổ phiếu {code}: {fpt_industry}")
-    #st.write("Các cổ phiếu cùng ngành:")
-    #st.dataframe(same_industry_stocks[['ticker', 'industry']])
-    
-    # Lọc dữ liệu tài chính cho các cổ phiếu trong ngành
     df_stocks = get_financial_data(same_industry_stocks)
 
     # Cho phép người dùng chọn các cổ phiếu hiển thị
@@ -413,7 +401,7 @@ def phan_tich_cp(code, df_stock, df_vnindex,df_insights):
     # Tạo các tab trong trang "Phân tích cổ phiếu"
     t1, t2, t3, t4, t5, t6= st.tabs([
        "Tổng quan", "Phân tích 360", "Phân tích kĩ thuật",
-        "Tài chính","Dữ liệu" , "Hồ sơ"])
+        "Tài chính","Dữ liệu","Hồ sơ"])
 
 
     with t1:
