@@ -413,7 +413,7 @@ def phan_tich_cp(code, df_stock, df_vnindex,df_insights):
     # Tạo các tab trong trang "Phân tích cổ phiếu"
     t1, t2, t3, t4, t5, t6= st.tabs([
        "Tổng quan", "Phân tích 360", "Phân tích kĩ thuật",
-        "Tài chính", "Hồ sơ", "Dữ liệu"])
+        "Tài chính","Dữ liệu" , "Hồ sơ"])
 
 
     with t1:
