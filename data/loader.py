@@ -118,24 +118,25 @@ def get_subsidiaries_info(code):
         print("⚠️ Không có dữ liệu về công ty con!")
         return pd.DataFrame()
 
-    # Kiểm tra sự tồn tại của cột 'organ_code' trước khi xóa
+    # Kiểm tra nếu cột 'organ_code' tồn tại trong DataFrame
     if 'organ_code' in subsidiaries.columns:
         subsidiaries = subsidiaries.drop(columns=['organ_code'])
 
-    # Kiểm tra sự tồn tại của các cột khác trước khi xóa
-    drop_cols = ['id', 'type']
-    existing_cols = [col for col in drop_cols if col in subsidiaries.columns]
-    subsidiaries = subsidiaries.drop(columns=existing_cols)
+    # Kiểm tra và xóa các cột không cần thiết nếu tồn tại
+    for column in ['id', 'type']:
+        if column in subsidiaries.columns:
+            subsidiaries = subsidiaries.drop(columns=[column])
 
+    # Đổi tên các cột theo yêu cầu
     subsidiaries.rename(
         columns={'sub_organ_code': 'Mã', 'ownership_percent': 'Tỷ lệ(%) sở hữu', 'organ_name': 'Tên công ty'},
         inplace=True
     )
+
+    # Loại bỏ khoảng trắng thừa trong tên cột
     subsidiaries.columns = subsidiaries.columns.str.strip()
 
     return subsidiaries
-
-
 
 @st.cache_resource
 # Hàm lấy thông tin cổ đông
