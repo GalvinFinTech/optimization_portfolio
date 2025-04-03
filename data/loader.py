@@ -1,6 +1,7 @@
 # data/loader.py
 import pandas as pd
 from vnstock import Vnstock
+from vnstock.explorer.vci import Company
 import streamlit as st
 import datetime
 # data/loader.py
@@ -133,10 +134,9 @@ def get_subsidiaries_info(code):
         inplace=True
     )
 
-    # Loại bỏ khoảng trắng thừa trong tên cột
-    subsidiaries.columns = subsidiaries.columns.str.strip()
 
     return subsidiaries
+
 
 @st.cache_resource
 # Hàm lấy thông tin cổ đông
