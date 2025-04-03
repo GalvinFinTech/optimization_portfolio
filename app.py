@@ -592,7 +592,7 @@ def main():
         unsafe_allow_html=True
     )
     logo_path = "LOGO.png"  # Điền đúng đường dẫn đến logo của bạn
-    st.sidebar.image(logo_path, use_column_width=True)  # Hiển thị logo trong sidebar
+    st.sidebar.image(logo_path, use_container_width=True)  # Hiển thị logo trong sidebar
 
     
 
