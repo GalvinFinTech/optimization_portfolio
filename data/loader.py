@@ -113,19 +113,31 @@ def get_officers_info(code):
 def get_subsidiaries_info(code):
     company = Vnstock().stock(symbol=code, source='VCI').company
     subsidiaries = company.subsidiaries()
-        # Kiểm tra nếu cột 'organ_code' tồn tại trước khi xó
-    
-    
+
+    # Kiểm tra nếu không có dữ liệu
     if subsidiaries is None or subsidiaries.empty:
         print("⚠️ Không có dữ liệu về công ty con!")
         return pd.DataFrame()
-    subsidiaries = subsidiaries.drop(columns=['organ_code'])
-    subsidiaries = subsidiaries.drop(columns=['id'])
-    subsidiaries = subsidiaries.drop(columns=['type'])
-    subsidiaries.rename(columns={'sub_organ_code': 'Mã', 'ownership_percent': 'Tỷ lệ(%) sở hữu','organ_name': 'Tên công ty'}, inplace=True)
+
+    # Danh sách cột cần xóa (nếu tồn tại)
+    columns_to_drop = ['organ_code', 'id', 'type']
+    subsidiaries = subsidiaries.drop(columns=[col for col in columns_to_drop if col in subsidiaries.columns], errors='ignore')
+
+    # Đổi tên cột nếu chúng tồn tại
+    rename_dict = {
+        'sub_organ_code': 'Mã',
+        'ownership_percent': 'Tỷ lệ(%) sở hữu',
+        'organ_name': 'Tên công ty'
+    }
+    
+    # Chỉ đổi tên nếu cột tồn tại
+    subsidiaries.rename(columns={k: v for k, v in rename_dict.items() if k in subsidiaries.columns}, inplace=True)
+    
+    # Loại bỏ khoảng trắng thừa trong tên cột
     subsidiaries.columns = subsidiaries.columns.str.strip()
 
     return subsidiaries
+
 
 @st.cache_resource
 # Hàm lấy thông tin cổ đông
