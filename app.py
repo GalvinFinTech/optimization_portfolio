@@ -468,50 +468,7 @@ def phan_tich_cp(code, df_stock, df_vnindex,df_insights):
         st.markdown("Bạn có thể mở các phần để xem biểu đồ chi tiết hơn. Di chuyển chuột qua các phần để xem thông tin rõ hơn.")
     
         
-    with t5:
-    # Tạo khung cho mỗi khối thông tin
-        st.markdown("<h2 style='text-align: center;'>Thông Tin Công Ty</h2>", unsafe_allow_html=True)
-
-        # Ban lãnh đạo
-        with st.container():
-            st.markdown("<h3 style='color: #4B0082;'>Ban Lãnh Đạo</h3>", unsafe_allow_html=True)
-            officers_info = get_officers_info(code)
-            if officers_info is None or officers_info.empty:
-                st.warning("Không có thông tin ban lãnh đạo.")
-            else:
-                # Tạm bỏ styling để kiểm tra
-                st.dataframe(officers_info)  # Thử mà không có highlighting
-                # Nếu muốn giữ highlighting:
-                # st.dataframe(officers_info.style.highlight_max(axis=0))
-
-        # Công ty con
-        with st.container():
-            st.markdown("<h3 style='color: #4B0082;'>Công Ty Con</h3>", unsafe_allow_html=True)
-            subsidiaries_info = get_subsidiaries_info(code)
-            if subsidiaries_info is None or subsidiaries_info.empty:
-                st.warning("Không có thông tin về công ty con.")
-            else:
-                # Tạm bỏ styling để kiểm tra
-                st.dataframe(subsidiaries_info)  # Thử mà không có highlighting
-
-        # Cổ đông lớn
-        with st.container():
-            st.markdown("<h3 style='color: #4B0082;'>Cổ Đông Lớn</h3>", unsafe_allow_html=True)
-            shareholders_info = get_shareholders_info(code)
-            if shareholders_info is None or shareholders_info.empty:
-                st.warning("Không có thông tin về cổ đông lớn.")
-            else:
-                # Tạm bỏ styling để kiểm tra
-                st.dataframe(shareholders_info)  # Thử mà không có highlighting
-  
-    with t6:
-        cdkt, kqkd, lctt = st.tabs(["Bảng Cân Đối Kế Toán", "Báo Cáo Kết Quả Kinh Doanh", "Báo Cáo Lưu Chuyển Tiền Tệ"])
-
-        with cdkt:
-            # In đậm tên cột
-            styled_balance = df_balance.style.set_properties(**{'font-weight': 'bold'}, subset=df_balance.columns)
-            st.dataframe(styled_balance.highlight_max(axis=0))  # Highlight maximum values
-
+    
             # Cung cấp tùy chọn tải xuống
             csv_balance = df_balance.to_csv(index=False).encode('utf-8')
             st.download_button("Tải Bảng Cân Đối Kế Toán", csv_balance, "balance_sheet.csv", "text/csv")
@@ -533,6 +490,50 @@ def phan_tich_cp(code, df_stock, df_vnindex,df_insights):
             # Cung cấp tùy chọn tải xuống
             csv_cash_flow = df_cash_flow.to_csv(index=False).encode('utf-8')
             st.download_button("Tải Báo Cáo Lưu Chuyển Tiền Tệ", csv_cash_flow, "cash_flow_statement.csv", "text/csv")
+        
+
+        
+    with t6:
+    # Tạo khung cho mỗi khối thông tin
+        st.markdown("<h2 style='text-align: center;'>Thông Tin Công Ty</h2>", unsafe_allow_html=True)
+
+        # Ban lãnh đạo
+        with st.container():
+            st.markdown("<h3 style='color: #4B0082;'>Ban Lãnh Đạo</h3>", unsafe_allow_html=True)
+            officers_info = get_officers_info(code)
+            if officers_info is None or officers_info.empty:
+                st.warning("Không có thông tin ban lãnh đạo.")
+            else:
+                # Tạm bỏ styling để kiểm tra
+                st.dataframe(officers_info)  # Thử mà không có highlighting
+                # Nếu muốn giữ highlighting:
+                # st.dataframe(officers_info.style.highlight_max(axis=0))
+
+        # Cổ đông lớn
+        with st.container():
+            st.markdown("<h3 style='color: #4B0082;'>Cổ Đông Lớn</h3>", unsafe_allow_html=True)
+            shareholders_info = get_shareholders_info(code)
+            if shareholders_info is None or shareholders_info.empty:
+                st.warning("Không có thông tin về cổ đông lớn.")
+            else:
+                # Tạm bỏ styling để kiểm tra
+                st.dataframe(shareholders_info)  # Thử mà không có highlighting
+
+        # Công ty con
+        with st.container():
+            # Công ty con (chỉ hiển thị nếu có dữ liệu)
+            try:
+                subsidiaries_info = get_subsidiaries_info(code)
+
+                # Kiểm tra nếu dữ liệu hợp lệ và không rỗng
+                if isinstance(subsidiaries_info, pd.DataFrame) and not subsidiaries_info.empty:
+                    with st.container():
+                        st.markdown("<h3 style='color: #4B0082;'>Công Ty Con</h3>", unsafe_allow_html=True)
+                        st.dataframe(subsidiaries_info)  # Hiển thị dữ liệu
+                # Nếu không có dữ liệu, KHÔNG hiển thị gì cả (không có st.info hay st.warning)
+                
+            except Exception as e:
+                st.error(f"Không có dữ liệu công ty con")
         
 
 def main():
