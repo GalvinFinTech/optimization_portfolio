@@ -124,7 +124,7 @@ def optimize_portfolio(symbols, total_investment, view_dict, confidence_dict, in
             "Mã cổ phiếu": symbol,
             "Tỷ trọng (%)": weights.get(symbol, 0) * 100,
             "Số lượng cổ phiếu": allocation.get(symbol, 0),
-            "Giá trị đầu tư (VNĐ)": allocation.get(symbol, 0) * latest_prices[symbol] * 1000,
+            "Giá mua(VNĐ)": latest_prices[symbol] * 1000,
             "Tỷ suất sinh lời kỳ vọng đã điều chỉnh": ret_bl[symbol] * 100 if symbol in ret_bl else 0,
             "Rủi ro đã điều chỉnh": np.sqrt(S_bl.loc[symbol, symbol]) if symbol in S_bl.index else 0,
             "Rủi ro ban đầu": np.sqrt(S.loc[symbol, symbol]) if symbol in S.index else 0
