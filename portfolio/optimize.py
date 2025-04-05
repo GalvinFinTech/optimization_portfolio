@@ -86,43 +86,55 @@ def optimize_portfolio(symbols, total_investment, view_dict, confidence_dict, in
     weights = ef.clean_weights()
     latest_prices = close_prices.iloc[-1]
 
-    # 4. Tính toán số lượng cổ phiếu (thay vì dùng DiscreteAllocation)
-    allocation = {}
-    total_used = 0
-    for symbol, weight in weights.items():
-        if symbol not in latest_prices:
-            continue
-        price = latest_prices[symbol]
-        allocated_value = total_investment * weight
-        qty = floor(allocated_value / price)
-        cost = qty * price
-        if qty > 0:
-            allocation[symbol] = qty
-            total_used += cost
+    # 4. Phân bổ: đảm bảo không vượt quá vốn & không để cổ phiếu nào qty = 0
+    def allocate_with_weights(weights_dict):
+        allocation = {}
+        total_cost = 0
+        for symbol, weight in weights_dict.items():
+            price = latest_prices.get(symbol, 0)
+            if price <= 0:
+                continue
+            allocated_value = total_investment * weight
+            qty = floor(allocated_value / price)
+            if qty > 0:
+                allocation[symbol] = qty
+                total_cost += qty * price
+        return allocation, total_cost
 
-    leftover_cash = total_investment - total_used
+    allocation, total_cost = allocate_with_weights(weights)
+
+    # Nếu vượt quá vốn thì scale lại weights và phân bổ lại
+    if total_cost > total_investment:
+        valid_weights = {s: w for s, w in weights.items() if s in allocation}
+        weight_sum = sum(valid_weights.values())
+        scaled_weights = {s: w / weight_sum for s, w in valid_weights.items()}
+        allocation, total_cost = allocate_with_weights(scaled_weights)
+        weights = scaled_weights  # cập nhật lại tỉ trọng mới
+
+    leftover_cash = total_investment - total_cost
 
     # 5. Tạo DataFrame kết quả
     details_data = []
-    for symbol in symbols:
+    for symbol in allocation:
         price = latest_prices.get(symbol, np.nan)
-        qty = allocation.get(symbol, 0)
+        qty = allocation[symbol]
         weight_percent = weights.get(symbol, 0) * 100
         details_data.append({
             "Mã cổ phiếu": symbol,
-            "Tỷ trọng (%)": weight_percent,
+            "Tỷ trọng (%)": round(weight_percent, 2),
             "Số lượng cổ phiếu": qty,
-            "Giá mua (VNĐ)": price * 1000 if not np.isnan(price) else None,
-            "Tổng tiền mua (VNĐ)": qty * price * 1000,
-            "Tỷ suất sinh lời kỳ vọng (BL)": ret_bl.get(symbol, 0) * 100,
-            "Tỷ suất sinh lời thị trường (prior)": market_prior.get(symbol, 0) * 100,
-            "Rủi ro điều chỉnh": np.sqrt(S_bl.loc[symbol, symbol]) if symbol in S_bl.index else None,
-            "Rủi ro ban đầu": np.sqrt(S.loc[symbol, symbol]) if symbol in S.index else None
+            "Giá mua (VNĐ)": round(price * 1000, 2) if not np.isnan(price) else None,
+            "Tổng tiền mua (VNĐ)": round(qty * price * 1000, 2),
+            "Tỷ suất sinh lời kỳ vọng (BL)": round(ret_bl.get(symbol, 0) * 100, 2),
+            "Tỷ suất sinh lời thị trường (prior)": round(market_prior.get(symbol, 0) * 100, 2),
+            "Rủi ro điều chỉnh": round(np.sqrt(S_bl.loc[symbol, symbol]), 4) if symbol in S_bl.index else None,
+            "Rủi ro ban đầu": round(np.sqrt(S.loc[symbol, symbol]), 4) if symbol in S.index else None
         })
 
     details_df = pd.DataFrame(details_data)
 
     return ef, weights, allocation, leftover_cash, details_df
+
 
 
 
