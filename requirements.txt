@@ -16,4 +16,3 @@ pyyaml
 bcrypt
 altair
 sklearn
-tslearn
