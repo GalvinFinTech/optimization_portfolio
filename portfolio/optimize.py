@@ -124,7 +124,6 @@ def optimize_portfolio(symbols, total_investment, view_dict, confidence_dict, in
             "Tỷ trọng (%)": round(weight_percent, 2),
             "Số lượng cổ phiếu": qty,
             "Giá mua (VNĐ)": round(price * 1000, 2) if not np.isnan(price) else None,
-            "Tổng tiền mua (VNĐ)": round(qty * price * 1000, 2),
             "Tỷ suất sinh lời kỳ vọng (BL)": round(ret_bl.get(symbol, 0) * 100, 2),
             "Tỷ suất sinh lời thị trường (prior)": round(market_prior.get(symbol, 0) * 100, 2),
             "Rủi ro điều chỉnh": round(np.sqrt(S_bl.loc[symbol, symbol]), 4) if symbol in S_bl.index else None,
