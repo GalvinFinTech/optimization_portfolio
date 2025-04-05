@@ -15,3 +15,5 @@ streamlit-authenticator
 pyyaml
 bcrypt
 altair
+sklearn
+tslearn
