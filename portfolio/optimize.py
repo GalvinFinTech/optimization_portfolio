@@ -38,7 +38,6 @@ from pypfopt.discrete_allocation import DiscreteAllocation
 def optimize_portfolio(symbols, total_investment, view_dict, confidence_dict, investment_goal, target_return=None, source="VCI"):
     from math import floor
 
-    # 1. Lấy dữ liệu
     end_date = datetime.today().strftime('%Y-%m-%d')
     start_date = (datetime.today() - pd.DateOffset(years=5)).strftime('%Y-%m-%d')
     
@@ -50,7 +49,6 @@ def optimize_portfolio(symbols, total_investment, view_dict, confidence_dict, in
     if close_prices.isna().any().any():
         raise ValueError("Dữ liệu giá cổ phiếu chứa giá trị NaN.")
 
-    # 2. Tính toán Black-Litterman
     delta = black_litterman.market_implied_risk_aversion(vnindex['close'])
     S = risk_models.CovarianceShrinkage(close_prices).ledoit_wolf()
     market_caps_df = load_mkt_caps(symbols)
@@ -68,7 +66,6 @@ def optimize_portfolio(symbols, total_investment, view_dict, confidence_dict, in
     S_bl = bl.bl_cov()
     max_possible_return = ret_bl.max()
 
-    # 3. Tối ưu hóa
     ef = EfficientFrontier(ret_bl, S_bl, weight_bounds=(0, 1))
     ef.add_objective(objective_functions.L2_reg)
 
@@ -86,23 +83,23 @@ def optimize_portfolio(symbols, total_investment, view_dict, confidence_dict, in
     weights = ef.clean_weights()
     latest_prices = close_prices.iloc[-1]
 
-    # 4. Tính toán số lượng cổ phiếu (thay vì dùng DiscreteAllocation)
+    # ✅ Tính số lượng cổ phiếu thủ công (không dùng DiscreteAllocation)
     allocation = {}
     total_used = 0
     for symbol, weight in weights.items():
-        if symbol not in latest_prices:
+        if symbol not in latest_prices or latest_prices[symbol] <= 0:
             continue
         price = latest_prices[symbol]
-        allocated_value = total_investment * weight
-        qty = floor(allocated_value / price)
+        allocated_amount = total_investment * weight
+        qty = floor(allocated_amount / price)
         cost = qty * price
-        if qty > 0:
+        if qty > 0 and total_used + cost <= total_investment:
             allocation[symbol] = qty
             total_used += cost
 
     leftover_cash = total_investment - total_used
 
-    # 5. Tạo DataFrame kết quả
+    # ✅ Tạo bảng chi tiết
     details_data = []
     for symbol in symbols:
         price = latest_prices.get(symbol, np.nan)
@@ -112,8 +109,8 @@ def optimize_portfolio(symbols, total_investment, view_dict, confidence_dict, in
             "Mã cổ phiếu": symbol,
             "Tỷ trọng (%)": weight_percent,
             "Số lượng cổ phiếu": qty,
-            "Giá mua (VNĐ)": price * 1000 if not np.isnan(price) else None,
-            "Tổng tiền mua (VNĐ)": qty * price * 1000,
+            "Giá mua (VNĐ)": round(price * 1000, 2) if not np.isnan(price) else None,
+            "Tổng tiền mua (VNĐ)": round(qty * price * 1000, 2),
             "Tỷ suất sinh lời kỳ vọng (BL)": ret_bl.get(symbol, 0) * 100,
             "Tỷ suất sinh lời thị trường (prior)": market_prior.get(symbol, 0) * 100,
             "Rủi ro điều chỉnh": np.sqrt(S_bl.loc[symbol, symbol]) if symbol in S_bl.index else None,
@@ -123,6 +120,7 @@ def optimize_portfolio(symbols, total_investment, view_dict, confidence_dict, in
     details_df = pd.DataFrame(details_data)
 
     return ef, weights, allocation, leftover_cash, details_df
+
 
 
 
