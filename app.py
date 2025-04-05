@@ -1,4 +1,9 @@
 # app.py
+import os
+if not os.path.isdir('data'):
+    os.system('git clone https://github.com/robertmartin8/PyPortfolioOpt.git')
+    os.chdir('PyPortfolioOpt/cookbook')
+    
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
