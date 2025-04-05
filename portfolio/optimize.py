@@ -36,102 +36,94 @@ from pypfopt import EfficientFrontier, risk_models, black_litterman, objective_f
 from pypfopt.discrete_allocation import DiscreteAllocation
 
 def optimize_portfolio(symbols, total_investment, view_dict, confidence_dict, investment_goal, target_return=None, source="VCI"):
-    # Xác định khoảng thời gian lấy dữ liệu (5 năm)
+    from math import floor
+
+    # 1. Lấy dữ liệu
     end_date = datetime.today().strftime('%Y-%m-%d')
     start_date = (datetime.today() - pd.DateOffset(years=5)).strftime('%Y-%m-%d')
     
-    # Tải dữ liệu giá cổ phiếu và VN-Index
     close_prices = fetch_multiple_stock_prices(symbols, start_date, end_date, source=source)
-    if close_prices.isnull().values.any():
-        st.error("Dữ liệu giá cổ phiếu chứa giá trị NaN, hãy kiểm tra và làm sạch dữ liệu trước khi tối ưu hóa.")
-        return None
     vnindex = fetch_vnindex_data(start_date, end_date, source=source)
-    
+
     if close_prices.empty or vnindex.empty:
         raise ValueError("Không thể tải dữ liệu giá cổ phiếu hoặc VN-Index.")
-    
-    # Kiểm tra dữ liệu giá có hợp lệ không
     if close_prices.isna().any().any():
-        raise ValueError("Dữ liệu giá cổ phiếu chứa giá trị NaN, không thể tiếp tục tối ưu hóa.")
-    
-    # Tính hệ số rủi ro thị trường
+        raise ValueError("Dữ liệu giá cổ phiếu chứa giá trị NaN.")
+
+    # 2. Tính toán Black-Litterman
     delta = black_litterman.market_implied_risk_aversion(vnindex['close'])
     S = risk_models.CovarianceShrinkage(close_prices).ledoit_wolf()
-    
-    # Lấy dữ liệu vốn hóa thị trường
     market_caps_df = load_mkt_caps(symbols)
     mcaps = pd.Series(market_caps_df.market_cap.values, index=market_caps_df.ticker).to_dict()
     market_prior = black_litterman.market_implied_prior_returns(mcaps, delta, S)
-    
-    # Tạo mô hình Black-Litterman
+
     bl = black_litterman.BlackLittermanModel(
-        S, 
-        pi=market_prior, 
-        absolute_views=view_dict, 
-        omega="idzorek", 
+        S,
+        pi=market_prior,
+        absolute_views=view_dict,
+        omega="idzorek",
         view_confidences=list(confidence_dict.values())
     )
     ret_bl = bl.bl_returns()
     S_bl = bl.bl_cov()
-    
-    # Tính mức lợi nhuận tối đa có thể đạt được
     max_possible_return = ret_bl.max()
-    
-    # Tối ưu hóa danh mục dựa trên mục tiêu đầu tư
-    weights = None
-    ef = None
+
+    # 3. Tối ưu hóa
+    ef = EfficientFrontier(ret_bl, S_bl, weight_bounds=(0, 1))
+    ef.add_objective(objective_functions.L2_reg)
+
     if investment_goal == "Tối đa hoá tỷ lệ Sharpe":
-        ef = EfficientFrontier(ret_bl, S_bl, weight_bounds=(0, 1))
-        ef.add_objective(objective_functions.L2_reg)
         ef.max_sharpe()
-        weights = ef.clean_weights()
-    
     elif investment_goal == "Đạt mức lợi nhuận mục tiêu và tối thiểu rủi ro phát sinh":
         if target_return is None:
-            raise ValueError("Mục tiêu đầu tư yêu cầu mức lợi nhuận mục tiêu (target_return).")
+            raise ValueError("Cần chỉ định target_return.")
         if target_return > max_possible_return:
-            raise ValueError(
-                f"Mức lợi nhuận mục tiêu ({target_return*100:.2f}%) vượt quá mức lợi nhuận tối đa có thể đạt được ({max_possible_return*100:.2f}%). "
-                "Vui lòng giảm mức lợi nhuận mục tiêu."
-            )
-        ef = EfficientFrontier(ret_bl, S_bl, weight_bounds=(0, 1))
+            raise ValueError(f"Lợi nhuận mục tiêu ({target_return:.2%}) > tối đa ({max_possible_return:.2%})")
         ef.efficient_return(target_return)
-        weights = ef.clean_weights()
-
-    
     else:
-        raise ValueError("Mục tiêu đầu tư không hợp lệ!")
-    
-    # Kiểm tra weights có hợp lệ không
-    if not weights or all(w == 0 for w in weights.values()):
-        raise ValueError("Không thể tối ưu hóa danh mục: weights không hợp lệ (có thể do dữ liệu không đủ hoặc không hợp lệ).")
-    
-    # Phân bổ số lượng cổ phiếu
+        raise ValueError("Mục tiêu đầu tư không hợp lệ.")
+
+    weights = ef.clean_weights()
     latest_prices = close_prices.iloc[-1]
-    if latest_prices.isna().any():
-        raise ValueError("Giá mới nhất (latest_prices) chứa giá trị NaN, không thể phân bổ cổ phiếu.")
-    
-    try:
-        da = DiscreteAllocation(weights, latest_prices, total_portfolio_value=total_investment)
-        allocation, leftover_cash = da.greedy_portfolio()
-    except Exception as e:
-        raise ValueError(f"Lỗi khi phân bổ cổ phiếu: {str(e)}")
-    
-    # Tạo DataFrame chi tiết danh mục
+
+    # 4. Tính toán số lượng cổ phiếu (thay vì dùng DiscreteAllocation)
+    allocation = {}
+    total_used = 0
+    for symbol, weight in weights.items():
+        if symbol not in latest_prices:
+            continue
+        price = latest_prices[symbol]
+        allocated_value = total_investment * weight
+        qty = floor(allocated_value / price)
+        cost = qty * price
+        if qty > 0:
+            allocation[symbol] = qty
+            total_used += cost
+
+    leftover_cash = total_investment - total_used
+
+    # 5. Tạo DataFrame kết quả
     details_data = []
     for symbol in symbols:
+        price = latest_prices.get(symbol, np.nan)
+        qty = allocation.get(symbol, 0)
+        weight_percent = weights.get(symbol, 0) * 100
         details_data.append({
             "Mã cổ phiếu": symbol,
-            "Tỷ trọng (%)": weights.get(symbol, 0) * 100,
-            "Số lượng cổ phiếu": allocation.get(symbol, 0),
-            "Giá mua(VNĐ)": latest_prices[symbol] * 1000,
-            "Tỷ suất sinh lời kỳ vọng đã điều chỉnh": ret_bl[symbol] * 100 if symbol in ret_bl else 0,
-            "Rủi ro đã điều chỉnh": np.sqrt(S_bl.loc[symbol, symbol]) if symbol in S_bl.index else 0,
-            "Rủi ro ban đầu": np.sqrt(S.loc[symbol, symbol]) if symbol in S.index else 0
+            "Tỷ trọng (%)": weight_percent,
+            "Số lượng cổ phiếu": qty,
+            "Giá mua (VNĐ)": price * 1000 if not np.isnan(price) else None,
+            "Tổng tiền mua (VNĐ)": qty * price * 1000,
+            "Tỷ suất sinh lời kỳ vọng (BL)": ret_bl.get(symbol, 0) * 100,
+            "Tỷ suất sinh lời thị trường (prior)": market_prior.get(symbol, 0) * 100,
+            "Rủi ro điều chỉnh": np.sqrt(S_bl.loc[symbol, symbol]) if symbol in S_bl.index else None,
+            "Rủi ro ban đầu": np.sqrt(S.loc[symbol, symbol]) if symbol in S.index else None
         })
+
     details_df = pd.DataFrame(details_data)
-    
+
     return ef, weights, allocation, leftover_cash, details_df
+
 
 
 import streamlit as st
